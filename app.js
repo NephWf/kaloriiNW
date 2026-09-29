@@ -1,0 +1,525 @@
+const KEY = "calorie-app-v1";
+const MEALS = [
+  { id: "breakfast", title: "Завтрак", hint: "утро" },
+  { id: "lunch", title: "Обед", hint: "день" },
+  { id: "dinner", title: "Ужин", hint: "вечер" },
+  { id: "snack", title: "Перекус", hint: "снек" }
+];
+
+const defaultProfile = {
+  name: "Я",
+  sex: "female",
+  age: 28,
+  height: 168,
+  weight: 62,
+  activity: 1.375,
+  aim: "keep",
+  goals: { kcal: 1900, p: 120, f: 55, c: 210, water: 8 }
+};
+
+const state = {
+  view: "today",
+  date: todayKey(),
+  profile: load().profile,
+  days: load().days,
+  customFoods: load().customFoods,
+  foodCat: "Все",
+  pendingMeal: "breakfast"
+};
+
+function todayKey(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY));
+    if (raw?.profile && raw?.days) return raw;
+  } catch {}
+  return { profile: structuredClone(defaultProfile), days: {}, customFoods: [] };
+}
+
+function save() {
+  localStorage.setItem(KEY, JSON.stringify({
+    profile: state.profile,
+    days: state.days,
+    customFoods: state.customFoods
+  }));
+}
+
+function day(date = state.date) {
+  if (!state.days[date]) {
+    state.days[date] = { water: 0, burned: 0, meals: { breakfast: [], lunch: [], dinner: [], snack: [] } };
+  }
+  return state.days[date];
+}
+
+function allFoods() {
+  return [...FOODS, ...state.customFoods];
+}
+
+function findFood(id) {
+  return allFoods().find((f) => f.id === id);
+}
+
+function gramsOf(entry) {
+  return Number(entry.grams) || 0;
+}
+
+function macrosOf(entry) {
+  const food = findFood(entry.foodId) || entry.snapshot;
+  if (!food) return { kcal: 0, p: 0, f: 0, c: 0 };
+  const k = gramsOf(entry) / 100;
+  return {
+    kcal: food.kcal * k,
+    p: food.p * k,
+    f: food.f * k,
+    c: food.c * k
+  };
+}
+
+function dayTotals(date = state.date) {
+  const d = day(date);
+  const totals = { kcal: 0, p: 0, f: 0, c: 0, count: 0 };
+  for (const meal of MEALS) {
+    for (const entry of d.meals[meal.id]) {
+      const m = macrosOf(entry);
+      totals.kcal += m.kcal;
+      totals.p += m.p;
+      totals.f += m.f;
+      totals.c += m.c;
+      totals.count += 1;
+    }
+  }
+  return totals;
+}
+
+function mealTotals(mealId) {
+  return day().meals[mealId].reduce((acc, e) => {
+    const m = macrosOf(e);
+    acc.kcal += m.kcal;
+    acc.p += m.p;
+    acc.f += m.f;
+    acc.c += m.c;
+    return acc;
+  }, { kcal: 0, p: 0, f: 0, c: 0 });
+}
+
+function fmt(n, digits = 0) {
+  return Number(n).toLocaleString("ru-RU", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+}
+
+function shiftDate(delta) {
+  const d = new Date(state.date + "T12:00:00");
+  d.setDate(d.getDate() + delta);
+  state.date = todayKey(d);
+  renderToday();
+}
+
+function dateLabel() {
+  const d = new Date(state.date + "T12:00:00");
+  if (state.date === todayKey()) return "Сегодня";
+  if (state.date === todayKey(new Date(Date.now() - 86400000))) return "Вчера";
+  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return "Доброй ночи";
+  if (h < 12) return "Доброе утро";
+  if (h < 18) return "Добрый день";
+  return "Добрый вечер";
+}
+
+function setRing(eaten, goal) {
+  const circle = document.getElementById("cal-ring");
+  const leftEl = document.getElementById("cal-left");
+  const label = document.getElementById("cal-left-label");
+  const max = 352;
+  const ratio = goal ? Math.min(eaten / goal, 1.15) : 0;
+  circle.style.strokeDashoffset = String(max - Math.min(ratio, 1) * max);
+  const left = Math.round(goal - eaten);
+  if (left >= 0) {
+    leftEl.textContent = fmt(left);
+    label.textContent = "осталось";
+    circle.style.stroke = "#8fde7a";
+  } else {
+    leftEl.textContent = fmt(Math.abs(left));
+    label.textContent = "сверх нормы";
+    circle.style.stroke = "#ff8a6a";
+  }
+}
+
+function setBar(id, value, goal) {
+  const pct = goal ? Math.min((value / goal) * 100, 100) : 0;
+  document.getElementById(id).style.width = pct + "%";
+}
+
+function renderToday() {
+  const totals = dayTotals();
+  const g = state.profile.goals;
+  const burned = day().burned || 0;
+  document.getElementById("greeting").textContent = greeting() + ", " + (state.profile.name || "друг");
+  document.getElementById("page-title").textContent = "Калории";
+  document.getElementById("date-label").textContent = dateLabel();
+  document.getElementById("avatar-letter").textContent = (state.profile.name || "Я").slice(0, 1).toUpperCase();
+  document.getElementById("cal-goal").textContent = fmt(g.kcal);
+  document.getElementById("cal-eaten").textContent = fmt(totals.kcal);
+  document.getElementById("cal-burned").textContent = fmt(burned);
+  setRing(totals.kcal - burned, g.kcal);
+  document.getElementById("p-text").textContent = `${fmt(totals.p)} / ${fmt(g.p)} г`;
+  document.getElementById("f-text").textContent = `${fmt(totals.f)} / ${fmt(g.f)} г`;
+  document.getElementById("c-text").textContent = `${fmt(totals.c)} / ${fmt(g.c)} г`;
+  setBar("p-bar", totals.p, g.p);
+  setBar("f-bar", totals.f, g.f);
+  setBar("c-bar", totals.c, g.c);
+  renderWater();
+  renderMeals();
+}
+
+function renderWater() {
+  const goal = state.profile.goals.water;
+  const now = day().water;
+  document.getElementById("water-now").textContent = now;
+  document.getElementById("water-goal").textContent = goal;
+  document.getElementById("glasses").innerHTML = Array.from({ length: goal }, (_, i) =>
+    `<button class="glass ${i < now ? "on" : ""}" data-n="${i + 1}" type="button" aria-label="Стакан ${i + 1}"></button>`
+  ).join("");
+}
+
+function renderMeals() {
+  document.getElementById("meals").innerHTML = MEALS.map((meal) => {
+    const items = day().meals[meal.id];
+    const t = mealTotals(meal.id);
+    const list = items.map((entry, idx) => {
+      const food = findFood(entry.foodId) || entry.snapshot || { name: "Продукт" };
+      const m = macrosOf(entry);
+      return `<div class="entry">
+        <div><b>${food.name}</b><small>${fmt(entry.grams)} г · Б ${fmt(m.p, 1)} Ж ${fmt(m.f, 1)} У ${fmt(m.c, 1)}</small></div>
+        <div>${fmt(m.kcal)} ккал</div>
+        <button class="x" data-remove="${meal.id}:${idx}" type="button">×</button>
+      </div>`;
+    }).join("");
+    return `<article class="meal card">
+      <div class="meal-head">
+        <h3>${meal.title}</h3>
+        <span class="meal-kcal">${fmt(t.kcal)} ккал</span>
+      </div>
+      ${list}
+      <button class="meal-add" data-add="${meal.id}" type="button">+ Добавить в ${meal.title.toLowerCase()}</button>
+    </article>`;
+  }).join("");
+}
+
+function renderFoods() {
+  const q = (document.getElementById("food-search").value || "").trim().toLowerCase();
+  const cats = ["Все", ...Array.from(new Set(allFoods().map((f) => f.cat)))];
+  document.getElementById("food-cats").innerHTML = cats.map((c) =>
+    `<button class="chip ${state.foodCat === c ? "on" : ""}" data-cat="${c}" type="button">${c}</button>`
+  ).join("");
+  const list = allFoods().filter((f) => {
+    const catOk = state.foodCat === "Все" || f.cat === state.foodCat;
+    const qOk = !q || f.name.toLowerCase().includes(q);
+    return catOk && qOk;
+  });
+  document.getElementById("food-list").innerHTML = `
+    <button class="meal-add custom-add" id="add-custom" type="button">+ Свой продукт</button>
+    <div class="food-list">
+      ${list.map((f) => `<button class="food-item" data-food="${f.id}" type="button">
+        <div><b>${f.name}</b><small>${f.cat} · на 100 г</small></div>
+        <div class="kcal">${f.kcal} ккал</div>
+      </button>`).join("") || `<p class="food-empty">Ничего не найдено</p>`}
+    </div>
+  `;
+}
+
+function last7() {
+  const dates = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(todayKey(d));
+  }
+  return dates;
+}
+
+function renderStats() {
+  const dates = last7();
+  const goal = state.profile.goals.kcal;
+  const max = Math.max(goal, ...dates.map((d) => dayTotals(d).kcal), 1);
+  const names = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  document.getElementById("week-bars").innerHTML = dates.map((d) => {
+    const t = dayTotals(d);
+    const h = Math.max(8, (t.kcal / max) * 120);
+    const label = names[new Date(d + "T12:00:00").getDay()];
+    const color = t.kcal > goal ? "#ff8a6a" : "#8fde7a";
+    return `<div class="wbar"><i style="height:${h}px;background:${t.kcal ? color : "#2c5342"}"></i><span>${label}</span></div>`;
+  }).join("");
+
+  const week = dates.reduce((acc, d) => {
+    const t = dayTotals(d);
+    acc.kcal += t.kcal;
+    acc.p += t.p;
+    acc.days += t.count ? 1 : 0;
+    return acc;
+  }, { kcal: 0, p: 0, days: 0 });
+
+  document.getElementById("stats-grid").innerHTML = `
+    <div class="stat"><span>Среднее за активные дни</span><b>${week.days ? fmt(week.kcal / week.days) : 0} ккал</b></div>
+    <div class="stat"><span>Белка за неделю</span><b>${fmt(week.p)} г</b></div>
+    <div class="stat"><span>Цель на день</span><b>${fmt(goal)} ккал</b></div>
+    <div class="stat"><span>Записей сегодня</span><b>${dayTotals().count}</b></div>
+  `;
+}
+
+function renderProfile() {
+  const p = state.profile;
+  document.getElementById("p-name").value = p.name;
+  document.getElementById("p-sex").value = p.sex;
+  document.getElementById("p-age").value = p.age;
+  document.getElementById("p-height").value = p.height;
+  document.getElementById("p-weight").value = p.weight;
+  document.getElementById("p-activity").value = String(p.activity);
+  document.getElementById("p-aim").value = p.aim;
+  document.getElementById("g-cal").value = p.goals.kcal;
+  document.getElementById("g-p").value = p.goals.p;
+  document.getElementById("g-f").value = p.goals.f;
+  document.getElementById("g-c").value = p.goals.c;
+  document.getElementById("g-water").value = p.goals.water;
+  document.getElementById("tdee-hint").textContent = `Текущая цель: ${fmt(p.goals.kcal)} ккал`;
+}
+
+function readProfileForm() {
+  state.profile.name = document.getElementById("p-name").value.trim() || "Я";
+  state.profile.sex = document.getElementById("p-sex").value;
+  state.profile.age = Number(document.getElementById("p-age").value);
+  state.profile.height = Number(document.getElementById("p-height").value);
+  state.profile.weight = Number(document.getElementById("p-weight").value);
+  state.profile.activity = Number(document.getElementById("p-activity").value);
+  state.profile.aim = document.getElementById("p-aim").value;
+}
+
+function calcTdee() {
+  readProfileForm();
+  const { sex, age, height, weight, activity, aim } = state.profile;
+  const s = sex === "male" ? 5 : -161;
+  const bmr = 10 * weight + 6.25 * height - 5 * age + s;
+  const tdee = bmr * activity;
+  const kcal = Math.round(tdee * (aim === "lose" ? 0.85 : aim === "gain" ? 1.12 : 1));
+  const p = Math.round(weight * (aim === "lose" ? 2.0 : 1.8));
+  const f = Math.round((kcal * 0.27) / 9);
+  const c = Math.max(80, Math.round((kcal - p * 4 - f * 9) / 4));
+  state.profile.goals = { ...state.profile.goals, kcal, p, f, c };
+  document.getElementById("g-cal").value = kcal;
+  document.getElementById("g-p").value = p;
+  document.getElementById("g-f").value = f;
+  document.getElementById("g-c").value = c;
+  document.getElementById("tdee-hint").textContent =
+    `BMR ${Math.round(bmr)} · расход ${Math.round(tdee)} · цель ${kcal} ккал`;
+  save();
+  renderToday();
+}
+
+function showView(view) {
+  state.view = view;
+  ["today", "foods", "stats", "profile"].forEach((v) => {
+    document.getElementById("view-" + v).classList.toggle("hidden", v !== view);
+  });
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === view);
+  });
+  const titles = { today: "Калории", foods: "Продукты", stats: "Статистика", profile: "Профиль" };
+  document.getElementById("page-title").textContent = titles[view];
+  if (view === "foods") renderFoods();
+  if (view === "stats") renderStats();
+  if (view === "profile") renderProfile();
+}
+
+function openSheet(html) {
+  document.getElementById("sheet-body").innerHTML = html;
+  document.getElementById("sheet").classList.remove("hidden");
+}
+
+function closeSheet() {
+  document.getElementById("sheet").classList.add("hidden");
+}
+
+function openAddFood(food, mealId = state.pendingMeal) {
+  const defaultG = food.unitG || 100;
+  openSheet(`
+    <h2>${food.name}</h2>
+    <p class="muted">На 100 г: ${food.kcal} ккал · Б ${food.p} · Ж ${food.f} · У ${food.c}</p>
+    <label class="muted" style="display:block;margin-top:12px">Приём пищи
+      <select id="add-meal">${MEALS.map((m) => `<option value="${m.id}" ${m.id === mealId ? "selected" : ""}>${m.title}</option>`).join("")}</select>
+    </label>
+    <div class="qty">
+      <button class="qty-btn" id="g-minus" type="button">−</button>
+      <input id="add-grams" type="number" min="1" max="2000" value="${defaultG}" />
+      <button class="qty-btn" id="g-plus" type="button">+</button>
+    </div>
+    <p class="hint" id="add-preview"></p>
+    <button class="btn primary" id="confirm-add" type="button">Добавить</button>
+  `);
+  const grams = () => Number(document.getElementById("add-grams").value) || 0;
+  const preview = () => {
+    const k = grams() / 100;
+    document.getElementById("add-preview").textContent =
+      `${fmt(food.kcal * k)} ккал · Б ${fmt(food.p * k, 1)} Ж ${fmt(food.f * k, 1)} У ${fmt(food.c * k, 1)}`;
+  };
+  preview();
+  document.getElementById("add-grams").addEventListener("input", preview);
+  document.getElementById("g-minus").onclick = () => {
+    document.getElementById("add-grams").value = Math.max(1, grams() - 10);
+    preview();
+  };
+  document.getElementById("g-plus").onclick = () => {
+    document.getElementById("add-grams").value = grams() + 10;
+    preview();
+  };
+  document.getElementById("confirm-add").onclick = () => {
+    const meal = document.getElementById("add-meal").value;
+    day().meals[meal].push({
+      foodId: food.id,
+      grams: grams(),
+      snapshot: { name: food.name, kcal: food.kcal, p: food.p, f: food.f, c: food.c }
+    });
+    save();
+    closeSheet();
+    showView("today");
+    renderToday();
+  };
+}
+
+function openCustomFood() {
+  openSheet(`
+    <h2>Свой продукт</h2>
+    <label class="muted" style="display:block;margin:8px 0">Название
+      <input id="cf-name" type="text" placeholder="Например, борщ домашний" />
+    </label>
+    <label class="muted" style="display:block;margin:8px 0">Калории на 100 г
+      <input id="cf-kcal" type="number" min="0" step="0.1" />
+    </label>
+    <div class="two">
+      <label class="muted">Белки, г
+        <input id="cf-p" type="number" min="0" step="0.1" />
+      </label>
+      <label class="muted">Жиры, г
+        <input id="cf-f" type="number" min="0" step="0.1" />
+      </label>
+    </div>
+    <label class="muted" style="display:block;margin:8px 0">Углеводы, г
+      <input id="cf-c" type="number" min="0" step="0.1" />
+    </label>
+    <button class="btn primary" id="save-custom" type="button">Сохранить и добавить</button>
+  `);
+  document.getElementById("save-custom").onclick = () => {
+    const food = {
+      id: "custom-" + Date.now(),
+      name: document.getElementById("cf-name").value.trim() || "Свой продукт",
+      cat: "Мои",
+      kcal: Number(document.getElementById("cf-kcal").value) || 0,
+      p: Number(document.getElementById("cf-p").value) || 0,
+      f: Number(document.getElementById("cf-f").value) || 0,
+      c: Number(document.getElementById("cf-c").value) || 0
+    };
+    state.customFoods.push(food);
+    save();
+    openAddFood(food, state.pendingMeal);
+  };
+}
+
+function openBurned() {
+  openSheet(`
+    <h2>Сожжённые калории</h2>
+    <p class="muted">Тренировка, шаги, активность за день</p>
+    <input id="burn-val" type="number" min="0" max="3000" value="${day().burned || 0}" />
+    <button class="btn primary" id="save-burn" type="button">Сохранить</button>
+  `);
+  document.getElementById("save-burn").onclick = () => {
+    day().burned = Number(document.getElementById("burn-val").value) || 0;
+    save();
+    closeSheet();
+    renderToday();
+  };
+}
+
+document.body.addEventListener("click", (e) => {
+  const tab = e.target.closest(".tab");
+  if (tab) showView(tab.dataset.view);
+
+  if (e.target.id === "prev-day") shiftDate(-1);
+  if (e.target.id === "next-day") shiftDate(1);
+  if (e.target.id === "date-label") {
+    state.date = todayKey();
+    renderToday();
+  }
+  if (e.target.id === "btn-profile") showView("profile");
+  if (e.target.id === "add-water") {
+    day().water = Math.min(state.profile.goals.water, day().water + 1);
+    save();
+    renderWater();
+  }
+  const glass = e.target.closest(".glass");
+  if (glass) {
+    day().water = Number(glass.dataset.n);
+    save();
+    renderWater();
+  }
+  const add = e.target.closest("[data-add]");
+  if (add) {
+    state.pendingMeal = add.dataset.add;
+    showView("foods");
+    renderFoods();
+  }
+  const remove = e.target.closest("[data-remove]");
+  if (remove) {
+    const [meal, idx] = remove.dataset.remove.split(":");
+    day().meals[meal].splice(Number(idx), 1);
+    save();
+    renderToday();
+  }
+  const cat = e.target.closest("[data-cat]");
+  if (cat) {
+    state.foodCat = cat.dataset.cat;
+    renderFoods();
+  }
+  const foodBtn = e.target.closest("[data-food]");
+  if (foodBtn) openAddFood(findFood(foodBtn.dataset.food), state.pendingMeal);
+  if (e.target.id === "add-custom") openCustomFood();
+  if (e.target.id === "sheet-close") closeSheet();
+  if (e.target.id === "calc-goal") calcTdee();
+  if (e.target.id === "save-goals") {
+    readProfileForm();
+    state.profile.goals = {
+      kcal: Number(document.getElementById("g-cal").value),
+      p: Number(document.getElementById("g-p").value),
+      f: Number(document.getElementById("g-f").value),
+      c: Number(document.getElementById("g-c").value),
+      water: Number(document.getElementById("g-water").value)
+    };
+    save();
+    document.getElementById("tdee-hint").textContent = "Цели сохранены";
+    renderToday();
+  }
+  if (e.target.id === "reset-day") {
+    delete state.days[state.date];
+    save();
+    renderToday();
+  }
+  if (e.target.id === "reset-all") {
+    if (confirm("Удалить все данные приложения?")) {
+      localStorage.removeItem(KEY);
+      state.profile = structuredClone(defaultProfile);
+      state.days = {};
+      state.customFoods = [];
+      renderToday();
+      renderProfile();
+    }
+  }
+});
+
+document.getElementById("food-search").addEventListener("input", renderFoods);
+document.getElementById("cal-burned").parentElement.addEventListener("click", openBurned);
+
+showView("today");
+renderToday();
