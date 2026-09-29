@@ -98,35 +98,37 @@ h2 { font-size: 18px; margin-bottom: 12px; }
 
 .hero {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 160px 1fr;
   gap: 8px;
   align-items: center;
   margin-bottom: 12px;
 }
-.ring-wrap { position: relative; width: 140px; height: 140px; }
+.ring-wrap { position: relative; width: 160px; height: 160px; }
 .ring { transform: rotate(-90deg); }
 .ring-bg, .ring-fg {
   fill: none;
-  stroke-width: 12;
+  stroke-width: 8;
 }
 .ring-bg { stroke: #2c5342; }
 .ring-fg {
   stroke: var(--mint);
   stroke-linecap: round;
-  stroke-dasharray: 352;
-  stroke-dashoffset: 352;
+  stroke-dasharray: 339;
+  stroke-dashoffset: 339;
   transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
 }
 .ring-center {
   position: absolute;
-  inset: 0;
+  inset: 22px;
   display: grid;
   place-content: center;
   text-align: center;
 }
 .ring-center strong {
   font-family: Unbounded, sans-serif;
-  font-size: 28px;
+  font-size: 22px;
+  line-height: 1;
+}
 }
 .ring-center span { color: var(--muted); font-size: 12px; }
 .hero-meta {
@@ -430,6 +432,16 @@ h2 { font-size: 18px; margin-bottom: 12px; }
 }
 
 .hidden { display: none !important; }
+.install-banner {
+  width: 100%;
+  margin: -6px 0 12px;
+  border: 0;
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--mint);
+  color: #123024;
+  font-weight: 800;
+}
 
 @media (min-width: 720px) {
   body { padding: 20px 0; }

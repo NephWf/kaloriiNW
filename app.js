@@ -135,7 +135,7 @@ function setRing(eaten, goal) {
   const circle = document.getElementById("cal-ring");
   const leftEl = document.getElementById("cal-left");
   const label = document.getElementById("cal-left-label");
-  const max = 352;
+  const max = 339;
   const ratio = goal ? Math.min(eaten / goal, 1.15) : 0;
   circle.style.strokeDashoffset = String(max - Math.min(ratio, 1) * max);
   const left = Math.round(goal - eaten);
@@ -523,3 +523,44 @@ document.getElementById("cal-burned").parentElement.addEventListener("click", op
 
 showView("today");
 renderToday();
+
+const installBtn = document.getElementById("btn-install");
+let deferredPrompt = null;
+const standalone =
+  window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+if (installBtn && !standalone) installBtn.classList.remove("hidden");
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredPrompt = event;
+  installBtn?.classList.remove("hidden");
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredPrompt = null;
+  installBtn?.classList.add("hidden");
+});
+
+installBtn?.addEventListener("click", async () => {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBtn.classList.add("hidden");
+    return;
+  }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  openSheet(ios ? `
+    <h2>На экран «Домой»</h2>
+    <p>В Safari нажмите «Поделиться», затем «На экран Домой».</p>
+  ` : `
+    <h2>Установить</h2>
+    <p>Откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран».</p>
+    <p class="muted">Страница должна быть открыта по адресу сайта, не из скачанного файла. Если пункт серый — обновите страницу ещё раз.</p>
+  `);
+});
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
