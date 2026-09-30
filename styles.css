@@ -1,8 +1,8 @@
 :root {
-  --bg: #10211a;
-  --bg-2: #163126;
-  --card: #1c3b2e;
-  --card-2: #234838;
+  --bg: #050807;
+  --bg-2: #0b100e;
+  --card: #121816;
+  --card-2: #1a221e;
   --line: rgba(232, 244, 232, 0.12);
   --text: #f3f7f2;
   --muted: #9bb5a6;
@@ -21,8 +21,8 @@ html, body { min-height: 100%; background: var(--bg); }
 body {
   font-family: Manrope, sans-serif;
   background:
-    radial-gradient(1200px 600px at 10% -10%, #2a5a40 0%, transparent 55%),
-    radial-gradient(900px 500px at 110% 10%, #3a4a28 0%, transparent 50%),
+    radial-gradient(1200px 600px at 10% -10%, #122018 0%, transparent 55%),
+    radial-gradient(900px 500px at 110% 10%, #10160f 0%, transparent 50%),
     var(--bg);
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
@@ -80,7 +80,7 @@ h2 { font-size: 18px; margin-bottom: 12px; }
 .icon-btn.ghost { background: var(--card-2); font-size: 22px; }
 
 .card {
-  background: linear-gradient(180deg, var(--card), #173328);
+  background: linear-gradient(180deg, var(--card), #0e1612);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 16px;
@@ -230,7 +230,7 @@ h2 { font-size: 18px; margin-bottom: 12px; }
 .search-box input, .form-card input, .form-card select, .sheet-panel input, .sheet-panel select {
   width: 100%;
   border: 0;
-  background: #12261d;
+  background: #0c1411;
   color: var(--text);
   border-radius: 14px;
   padding: 14px 14px;
@@ -265,7 +265,7 @@ h2 { font-size: 18px; margin-bottom: 12px; }
 }
 
 .food-list {
-  background: linear-gradient(180deg, var(--card), #173328);
+  background: linear-gradient(180deg, var(--card), #0e1612);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
@@ -366,7 +366,7 @@ h2 { font-size: 18px; margin-bottom: 12px; }
   width: min(488px, calc(100% - 24px));
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  background: #12261d;
+  background: #0c1411;
   border: 1px solid var(--line);
   border-radius: 22px;
   padding: 8px;
@@ -384,7 +384,7 @@ h2 { font-size: 18px; margin-bottom: 12px; }
   border-radius: 14px;
 }
 .tab span { font-size: 16px; }
-.tab.active { color: var(--text); background: #234838; }
+.tab.active { color: var(--text); background: #1a221e; }
 
 .sheet {
   position: fixed;
@@ -402,7 +402,7 @@ h2 { font-size: 18px; margin-bottom: 12px; }
   bottom: 0;
   transform: translateX(-50%);
   width: min(520px, 100%);
-  background: #163126;
+  background: #101815;
   color: var(--text);
   border-radius: 24px 24px 0 0;
   padding: 10px 16px 28px;
