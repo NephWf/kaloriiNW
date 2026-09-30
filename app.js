@@ -12,9 +12,9 @@ const defaultProfile = {
   age: 28,
   height: 168,
   weight: 62,
-  activity: 1.375,
+  activity: "low",
   aim: "keep",
-  goals: { kcal: 1900, p: 120, f: 55, c: 210, water: 8 }
+  goals: { kcal: 2243, p: 99, f: 75, c: 293, water: 8 }
 };
 
 const state = {
@@ -34,7 +34,10 @@ function todayKey(d = new Date()) {
 function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY));
-    if (raw?.profile && raw?.days) return raw;
+    if (raw?.profile && raw?.days) {
+      raw.profile.activity = activityLevel(raw.profile.activity);
+      return raw;
+    }
   } catch {}
   return { profile: structuredClone(defaultProfile), days: {}, customFoods: [] };
 }
@@ -279,7 +282,7 @@ function renderProfile() {
   document.getElementById("p-age").value = p.age;
   document.getElementById("p-height").value = p.height;
   document.getElementById("p-weight").value = p.weight;
-  document.getElementById("p-activity").value = String(p.activity);
+  document.getElementById("p-activity").value = activityLevel(p.activity);
   document.getElementById("p-aim").value = p.aim;
   document.getElementById("g-cal").value = p.goals.kcal;
   document.getElementById("g-p").value = p.goals.p;
@@ -295,27 +298,95 @@ function readProfileForm() {
   state.profile.age = Number(document.getElementById("p-age").value);
   state.profile.height = Number(document.getElementById("p-height").value);
   state.profile.weight = Number(document.getElementById("p-weight").value);
-  state.profile.activity = Number(document.getElementById("p-activity").value);
+  state.profile.activity = activityLevel(document.getElementById("p-activity").value);
   state.profile.aim = document.getElementById("p-aim").value;
+}
+
+function activityLevel(value) {
+  if (value === "inactive" || value === "low" || value === "active" || value === "very") return value;
+  const factor = Number(value);
+  if (!Number.isFinite(factor) || factor <= 1.3) return "inactive";
+  if (factor <= 1.45) return "low";
+  if (factor <= 1.65) return "active";
+  return "very";
+}
+
+function maintenanceKcal(sex, age, height, weight, level) {
+  const adult = {
+    male: {
+      inactive: [753.07, -10.83, 6.5, 14.1],
+      low: [581.47, -10.83, 8.3, 14.94],
+      active: [1004.82, -10.83, 6.52, 15.91],
+      very: [-517.88, -10.83, 15.61, 19.11]
+    },
+    female: {
+      inactive: [584.9, -7.01, 5.72, 11.71],
+      low: [575.77, -7.01, 6.6, 12.14],
+      active: [710.25, -7.01, 6.54, 12.34],
+      very: [511.83, -7.01, 9.07, 12.56]
+    }
+  };
+  const youth = {
+    male: {
+      inactive: [-447.51, 3.68, 13.01, 13.15, 20],
+      low: [19.12, 3.68, 8.62, 20.28, 20],
+      active: [-388.19, 3.68, 12.66, 20.46, 20],
+      very: [-671.75, 3.68, 15.38, 23.25, 20]
+    },
+    female: {
+      inactive: [55.59, -22.25, 8.43, 17.07, 20],
+      low: [-297.54, -22.25, 12.77, 14.73, 20],
+      active: [-189.55, -22.25, 11.74, 18.34, 20],
+      very: [-709.59, -22.25, 18.22, 14.25, 20]
+    }
+  };
+  if (age >= 19) {
+    const [base, ageK, heightK, weightK] = adult[sex][level];
+    return base + ageK * age + heightK * height + weightK * weight;
+  }
+  const [base, ageK, heightK, weightK, growth] = youth[sex][level];
+  return base + ageK * age + heightK * height + weightK * weight + growth;
 }
 
 function calcTdee() {
   readProfileForm();
   const { sex, age, height, weight, activity, aim } = state.profile;
-  const s = sex === "male" ? 5 : -161;
-  const bmr = 10 * weight + 6.25 * height - 5 * age + s;
-  const tdee = bmr * activity;
-  const kcal = Math.round(tdee * (aim === "lose" ? 0.85 : aim === "gain" ? 1.12 : 1));
-  const p = Math.round(weight * (aim === "lose" ? 2.0 : 1.8));
-  const f = Math.round((kcal * 0.27) / 9);
-  const c = Math.max(80, Math.round((kcal - p * 4 - f * 9) / 4));
-  state.profile.goals = { ...state.profile.goals, kcal, p, f, c };
+  const level = activityLevel(activity);
+  const safeAge = Math.min(90, Math.max(12, Number(age) || 0));
+  const safeHeight = Math.min(230, Math.max(120, Number(height) || 0));
+  const safeWeight = Math.min(250, Math.max(30, Number(weight) || 0));
+  const maintenance = maintenanceKcal(sex === "male" ? "male" : "female", safeAge, safeHeight, safeWeight, level);
+  const bmr = 10 * safeWeight + 6.25 * safeHeight - 5 * safeAge + (sex === "male" ? 5 : -161);
+  let target = maintenance;
+  if (aim === "lose") {
+    const cut = Math.min(500, maintenance * (safeAge < 18 ? 0.1 : 0.2));
+    const floor = safeAge < 18 ? 1600 : sex === "male" ? 1500 : 1200;
+    target = Math.min(maintenance, Math.max(floor, maintenance - cut));
+  } else if (aim === "gain") {
+    target = maintenance + Math.min(400, Math.max(250, maintenance * 0.1));
+  }
+  const refKg = Math.min(safeWeight, 25 * (safeHeight / 100) ** 2);
+  const perKg = aim === "gain" ? 1.8 : aim === "lose" && safeAge >= 18 ? 2 : 1.6;
+  let protein = Math.round(refKg * perKg);
+  const fatMin = Math.round(safeWeight * 0.8);
+  let fat = Math.round((target * (aim === "lose" ? 0.25 : 0.3)) / 9);
+  const fatMax = Math.floor((target - protein * 4 - 400) / 9);
+  fat = fatMax >= fatMin ? Math.min(Math.max(fat, fatMin), fatMax) : fatMin;
+  let remain = target - protein * 4 - fat * 9;
+  if (remain < 0) {
+    protein = Math.max(Math.round(refKg * 1.2), Math.floor((target - fat * 9) / 4));
+    remain = target - protein * 4 - fat * 9;
+  }
+  const carbs = Math.max(0, Math.round(remain / 4));
+  const kcal = protein * 4 + fat * 9 + carbs * 4;
+  state.profile.activity = level;
+  state.profile.goals = { ...state.profile.goals, kcal, p: protein, f: fat, c: carbs };
   document.getElementById("g-cal").value = kcal;
-  document.getElementById("g-p").value = p;
-  document.getElementById("g-f").value = f;
-  document.getElementById("g-c").value = c;
+  document.getElementById("g-p").value = protein;
+  document.getElementById("g-f").value = fat;
+  document.getElementById("g-c").value = carbs;
   document.getElementById("tdee-hint").textContent =
-    `BMR ${Math.round(bmr)} · расход ${Math.round(tdee)} · цель ${kcal} ккал`;
+    `Обмен ${fmt(Math.round(bmr))} · расход ${fmt(Math.round(maintenance))} · цель ${fmt(kcal)} ккал. Белки ${fmt(protein)} г, жиры ${fmt(fat)} г, углеводы ${fmt(carbs)} г`;
   save();
   renderToday();
 }

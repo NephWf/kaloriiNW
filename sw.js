@@ -1,4 +1,4 @@
-const CACHE = "kalorii-nw-v3";
+const CACHE = "kalorii-nw-v4";
 const ASSETS = [
   "./",
   "./index.html",
