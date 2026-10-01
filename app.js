@@ -23,6 +23,8 @@ const state = {
   profile: load().profile,
   days: load().days,
   customFoods: load().customFoods,
+  hiddenFoods: load().hiddenFoods || [],
+  foodEdits: load().foodEdits || {},
   foodCat: "Все",
   pendingMeal: "breakfast"
 };
@@ -36,6 +38,9 @@ function load() {
     const raw = JSON.parse(localStorage.getItem(KEY));
     if (raw?.profile && raw?.days) {
       raw.profile.activity = activityLevel(raw.profile.activity);
+      raw.customFoods = raw.customFoods || [];
+      raw.hiddenFoods = raw.hiddenFoods || [];
+      raw.foodEdits = raw.foodEdits || {};
       return raw;
     }
   } catch {}
@@ -46,7 +51,9 @@ function save() {
   localStorage.setItem(KEY, JSON.stringify({
     profile: state.profile,
     days: state.days,
-    customFoods: state.customFoods
+    customFoods: state.customFoods,
+    hiddenFoods: state.hiddenFoods,
+    foodEdits: state.foodEdits
   }));
 }
 
@@ -58,7 +65,16 @@ function day(date = state.date) {
 }
 
 function allFoods() {
-  return [...FOODS, ...state.customFoods];
+  const hidden = new Set(state.hiddenFoods);
+  const base = FOODS.filter((food) => !hidden.has(food.id)).map((food) =>
+    state.foodEdits[food.id] ? { ...food, ...state.foodEdits[food.id], id: food.id } : food
+  );
+  return [...base, ...state.customFoods.filter((food) => !hidden.has(food.id))];
+}
+
+function esc(value) {
+  const map = { "&": "amp", "<": "lt", ">": "gt", '"': "quot", "'": "#39" };
+  return String(value).replace(/[&<>"']/g, (char) => `&${map[char]};`);
 }
 
 function findFood(id) {
@@ -228,10 +244,14 @@ function renderFoods() {
   document.getElementById("food-list").innerHTML = `
     <button class="meal-add custom-add" id="add-custom" type="button">+ Свой продукт</button>
     <div class="food-list">
-      ${list.map((f) => `<button class="food-item" data-food="${f.id}" type="button">
-        <div><b>${f.name}</b><small>${f.cat} · на 100 г</small></div>
-        <div class="kcal">${f.kcal} ккал</div>
-      </button>`).join("") || `<p class="food-empty">Ничего не найдено</p>`}
+      ${list.map((f) => `<div class="food-item">
+        <button class="food-main" data-food="${esc(f.id)}" type="button">
+          <div><b>${esc(f.name)}</b><small>${esc(f.cat)} · на 100 г</small></div>
+          <div class="kcal">${f.kcal} ккал</div>
+        </button>
+        <button class="food-act" data-edit="${esc(f.id)}" type="button">Изм.</button>
+        <button class="food-act danger" data-delete="${esc(f.id)}" type="button">Удал.</button>
+      </div>`).join("") || `<p class="food-empty">Ничего не найдено</p>`}
     </div>
   `;
 }
@@ -461,41 +481,50 @@ function openAddFood(food, mealId = state.pendingMeal) {
   };
 }
 
-function openCustomFood() {
+function openFoodForm(food) {
+  const editing = Boolean(food);
   openSheet(`
-    <h2>Свой продукт</h2>
+    <h2>${editing ? "Изменить продукт" : "Свой продукт"}</h2>
     <label class="muted" style="display:block;margin:8px 0">Название
-      <input id="cf-name" type="text" placeholder="Например, борщ домашний" />
+      <input id="cf-name" type="text" value="${esc(food?.name || "")}" placeholder="Макароны по флотски 🍝" />
     </label>
     <label class="muted" style="display:block;margin:8px 0">Калории на 100 г
-      <input id="cf-kcal" type="number" min="0" step="0.1" />
+      <input id="cf-kcal" type="number" min="0" step="0.1" value="${food?.kcal ?? ""}" />
     </label>
     <div class="two">
       <label class="muted">Белки, г
-        <input id="cf-p" type="number" min="0" step="0.1" />
+        <input id="cf-p" type="number" min="0" step="0.1" value="${food?.p ?? ""}" />
       </label>
       <label class="muted">Жиры, г
-        <input id="cf-f" type="number" min="0" step="0.1" />
+        <input id="cf-f" type="number" min="0" step="0.1" value="${food?.f ?? ""}" />
       </label>
     </div>
     <label class="muted" style="display:block;margin:8px 0">Углеводы, г
-      <input id="cf-c" type="number" min="0" step="0.1" />
+      <input id="cf-c" type="number" min="0" step="0.1" value="${food?.c ?? ""}" />
     </label>
-    <button class="btn primary" id="save-custom" type="button">Сохранить и добавить</button>
+    <button class="btn primary" id="save-custom" type="button">${editing ? "Сохранить" : "Сохранить и добавить"}</button>
   `);
   document.getElementById("save-custom").onclick = () => {
-    const food = {
-      id: "custom-" + Date.now(),
+    const fields = {
       name: document.getElementById("cf-name").value.trim() || "Свой продукт",
-      cat: "Мои",
       kcal: Number(document.getElementById("cf-kcal").value) || 0,
       p: Number(document.getElementById("cf-p").value) || 0,
       f: Number(document.getElementById("cf-f").value) || 0,
       c: Number(document.getElementById("cf-c").value) || 0
     };
-    state.customFoods.push(food);
+    if (editing) {
+      const custom = state.customFoods.find((item) => item.id === food.id);
+      if (custom) Object.assign(custom, fields);
+      else state.foodEdits[food.id] = { ...food, ...fields, id: food.id };
+      save();
+      closeSheet();
+      renderFoods();
+      return;
+    }
+    const created = { id: "custom-" + Date.now(), cat: "Мои", ...fields };
+    state.customFoods.push(created);
     save();
-    openAddFood(food, state.pendingMeal);
+    openAddFood(created, state.pendingMeal);
   };
 }
 
@@ -554,9 +583,29 @@ document.body.addEventListener("click", (e) => {
     state.foodCat = cat.dataset.cat;
     renderFoods();
   }
+  const editBtn = e.target.closest("[data-edit]");
+  if (editBtn) {
+    openFoodForm(findFood(editBtn.dataset.edit));
+    return;
+  }
+  const deleteBtn = e.target.closest("[data-delete]");
+  if (deleteBtn) {
+    const food = findFood(deleteBtn.dataset.delete);
+    if (food && confirm(`Удалить «${food.name}» из списка?`)) {
+      const customIndex = state.customFoods.findIndex((item) => item.id === food.id);
+      if (customIndex >= 0) state.customFoods.splice(customIndex, 1);
+      else {
+        state.hiddenFoods.push(food.id);
+        delete state.foodEdits[food.id];
+      }
+      save();
+      renderFoods();
+    }
+    return;
+  }
   const foodBtn = e.target.closest("[data-food]");
   if (foodBtn) openAddFood(findFood(foodBtn.dataset.food), state.pendingMeal);
-  if (e.target.id === "add-custom") openCustomFood();
+  if (e.target.id === "add-custom") openFoodForm(null);
   if (e.target.id === "sheet-close") closeSheet();
   if (e.target.id === "calc-goal") calcTdee();
   if (e.target.id === "save-goals") {
@@ -583,6 +632,8 @@ document.body.addEventListener("click", (e) => {
       state.profile = structuredClone(defaultProfile);
       state.days = {};
       state.customFoods = [];
+      state.hiddenFoods = [];
+      state.foodEdits = {};
       renderToday();
       renderProfile();
     }

@@ -273,32 +273,52 @@ h2 { font-size: 18px; margin-bottom: 12px; }
 .food-item {
   display: flex;
   width: 100%;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 6px;
+  padding: 8px 10px 8px 16px;
   background: transparent;
   color: var(--text);
-  text-align: left;
   border-bottom: 1px solid var(--line);
 }
 .food-item:last-child { border-bottom: 0; }
-.food-item b {
+.food-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.food-main b {
   display: block;
   font-size: 15px;
   color: var(--text);
 }
-.food-item small {
+.food-main small {
   display: block;
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
 }
-.food-item .kcal {
+.food-main .kcal {
   color: var(--mint-2);
   font-weight: 700;
   white-space: nowrap;
 }
+.food-act {
+  flex: 0 0 auto;
+  border-radius: 10px;
+  padding: 8px 9px;
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+.food-act.danger { color: #ffb4a8; }
 .food-empty {
   padding: 18px 16px;
   color: var(--muted);
