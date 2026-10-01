@@ -311,13 +311,16 @@ h2 { font-size: 18px; margin-bottom: 12px; }
 }
 .food-act {
   flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border-radius: 10px;
-  padding: 8px 9px;
-  background: var(--card-2);
+  background: transparent;
   color: var(--text);
-  font-size: 12px;
-  font-weight: 800;
 }
+.food-act svg { width: 26px; height: 26px; display: block; }
 .food-act.danger { color: #ffb4a8; }
 .food-empty {
   padding: 18px 16px;
