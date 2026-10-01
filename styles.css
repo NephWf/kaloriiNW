@@ -321,7 +321,7 @@ h2 { font-size: 18px; margin-bottom: 12px; }
   color: #2c5342;
 }
 .food-act svg { width: 26px; height: 26px; display: block; }
-.food-act.danger { color: #ffb4a8; }
+.food-act.danger { color: #971500; }
 .food-empty {
   padding: 18px 16px;
   color: var(--muted);
