@@ -252,9 +252,6 @@ function renderFoods() {
         <button class="food-act" data-edit="${esc(f.id)}" type="button" aria-label="Изменить">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.2 15.8l.45-2.15 6.35-6.35 1.7 1.7-6.35 6.35-2.15.45z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13.7 8.15l1.7 1.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         </button>
-        <button class="food-act danger" data-delete="${esc(f.id)}" type="button" aria-label="Удалить">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-        </button>
       </div>`).join("") || `<p class="food-empty">Ничего не найдено</p>`}
     </div>
   `;
@@ -507,6 +504,7 @@ function openFoodForm(food) {
       <input id="cf-c" type="number" min="0" step="0.1" value="${food?.c ?? ""}" />
     </label>
     <button class="btn primary" id="save-custom" type="button">${editing ? "Сохранить" : "Сохранить и добавить"}</button>
+    ${editing ? `<button class="btn danger" id="delete-food" type="button">Удалить из списка</button>` : ""}
   `);
   document.getElementById("save-custom").onclick = () => {
     const fields = {
@@ -530,6 +528,21 @@ function openFoodForm(food) {
     save();
     openAddFood(created, state.pendingMeal);
   };
+  const deleteFood = document.getElementById("delete-food");
+  if (deleteFood) {
+    deleteFood.onclick = () => {
+      if (!confirm(`Удалить «${food.name}» из списка?`)) return;
+      const customIndex = state.customFoods.findIndex((item) => item.id === food.id);
+      if (customIndex >= 0) state.customFoods.splice(customIndex, 1);
+      else {
+        state.hiddenFoods.push(food.id);
+        delete state.foodEdits[food.id];
+      }
+      save();
+      closeSheet();
+      renderFoods();
+    };
+  }
 }
 
 function openBurned() {
@@ -590,21 +603,6 @@ document.body.addEventListener("click", (e) => {
   const editBtn = e.target.closest("[data-edit]");
   if (editBtn) {
     openFoodForm(findFood(editBtn.dataset.edit));
-    return;
-  }
-  const deleteBtn = e.target.closest("[data-delete]");
-  if (deleteBtn) {
-    const food = findFood(deleteBtn.dataset.delete);
-    if (food && confirm(`Удалить «${food.name}» из списка?`)) {
-      const customIndex = state.customFoods.findIndex((item) => item.id === food.id);
-      if (customIndex >= 0) state.customFoods.splice(customIndex, 1);
-      else {
-        state.hiddenFoods.push(food.id);
-        delete state.foodEdits[food.id];
-      }
-      save();
-      renderFoods();
-    }
     return;
   }
   const foodBtn = e.target.closest("[data-food]");
