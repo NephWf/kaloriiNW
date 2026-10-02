@@ -57,6 +57,33 @@ function save() {
   }));
 }
 
+function dayDistance(a, b) {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  const start = Date.UTC(ay, am - 1, ad);
+  const end = Date.UTC(by, bm - 1, bd);
+  return Math.round(Math.abs(start - end) / 86400000);
+}
+
+function daysWord(count) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "день";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "дня";
+  return "дней";
+}
+
+function cheatStatus(date = state.date) {
+  const on = Boolean(state.days[date]?.cheat);
+  let daysLeft = 0;
+  for (const [key, log] of Object.entries(state.days)) {
+    if (!log?.cheat || key === date) continue;
+    const wait = 7 - dayDistance(key, date);
+    if (wait > daysLeft) daysLeft = wait;
+  }
+  return { on, locked: !on && daysLeft > 0, daysLeft };
+}
+
 function day(date = state.date) {
   if (!state.days[date]) {
     state.days[date] = { water: 0, burned: 0, meals: { breakfast: [], lunch: [], dinner: [], snack: [] } };
@@ -178,6 +205,7 @@ function renderToday() {
   const totals = dayTotals();
   const g = state.profile.goals;
   const burned = day().burned || 0;
+  const cheat = cheatStatus();
   document.getElementById("greeting").textContent = greeting() + ", " + (state.profile.name || "друг");
   document.getElementById("page-title").textContent = "Калории";
   document.getElementById("date-label").textContent = dateLabel();
@@ -185,13 +213,26 @@ function renderToday() {
   document.getElementById("cal-goal").textContent = fmt(g.kcal);
   document.getElementById("cal-eaten").textContent = fmt(totals.kcal);
   document.getElementById("cal-burned").textContent = fmt(burned);
-  setRing(totals.kcal - burned, g.kcal);
+  setRing(cheat.on ? 0 : totals.kcal - burned, g.kcal);
+  if (cheat.on) {
+    document.getElementById("cal-left-label").textContent = "не в счёт";
+    document.getElementById("cal-ring").style.stroke = "#f0c36a";
+  }
   document.getElementById("p-text").textContent = `${fmt(totals.p)} / ${fmt(g.p)} г`;
   document.getElementById("f-text").textContent = `${fmt(totals.f)} / ${fmt(g.f)} г`;
   document.getElementById("c-text").textContent = `${fmt(totals.c)} / ${fmt(g.c)} г`;
   setBar("p-bar", totals.p, g.p);
   setBar("f-bar", totals.f, g.f);
   setBar("c-bar", totals.c, g.c);
+  const dock = document.getElementById("cheat-dock");
+  dock.classList.toggle("on", cheat.on);
+  dock.disabled = cheat.locked;
+  dock.setAttribute("aria-checked", cheat.on ? "true" : "false");
+  document.getElementById("cheat-hint").textContent = cheat.on
+    ? "Калории этого дня не учитываются"
+    : cheat.locked
+      ? `Следующий через ${cheat.daysLeft} ${daysWord(cheat.daysLeft)}`
+      : "Калории за этот день не пойдут в норму";
   renderWater();
   renderMeals();
 }
@@ -270,17 +311,20 @@ function last7() {
 function renderStats() {
   const dates = last7();
   const goal = state.profile.goals.kcal;
-  const max = Math.max(goal, ...dates.map((d) => dayTotals(d).kcal), 1);
+  const max = Math.max(goal, ...dates.map((d) => (state.days[d]?.cheat ? 0 : dayTotals(d).kcal)), 1);
   const names = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
   document.getElementById("week-bars").innerHTML = dates.map((d) => {
     const t = dayTotals(d);
-    const h = Math.max(8, (t.kcal / max) * 120);
+    const cheat = Boolean(state.days[d]?.cheat);
+    const kcal = cheat ? 0 : t.kcal;
+    const h = Math.max(8, (kcal / max) * 120);
     const label = names[new Date(d + "T12:00:00").getDay()];
-    const color = t.kcal > goal ? "#ff8a6a" : "#8fde7a";
-    return `<div class="wbar"><i style="height:${h}px;background:${t.kcal ? color : "#2c5342"}"></i><span>${label}</span></div>`;
+    const color = cheat ? "#f0c36a" : t.kcal > goal ? "#ff8a6a" : "#8fde7a";
+    return `<div class="wbar"><i style="height:${h}px;background:${kcal ? color : cheat ? "#f0c36a" : "#2c5342"}"></i><span>${label}</span></div>`;
   }).join("");
 
   const week = dates.reduce((acc, d) => {
+    if (state.days[d]?.cheat) return acc;
     const t = dayTotals(d);
     acc.kcal += t.kcal;
     acc.p += t.p;
@@ -422,6 +466,8 @@ function showView(view) {
   });
   const titles = { today: "Калории", foods: "Продукты", stats: "Статистика", profile: "Профиль" };
   document.getElementById("page-title").textContent = titles[view];
+  document.querySelector(".app").classList.toggle("with-cheat", view === "today");
+  document.getElementById("cheat-dock").classList.toggle("hidden", view !== "today");
   if (view === "foods") renderFoods();
   if (view === "stats") renderStats();
   if (view === "profile") renderProfile();
@@ -640,6 +686,14 @@ document.body.addEventListener("click", (e) => {
       renderProfile();
     }
   }
+});
+
+document.getElementById("cheat-dock").addEventListener("click", () => {
+  const status = cheatStatus();
+  if (status.locked) return;
+  day().cheat = !status.on;
+  save();
+  renderToday();
 });
 
 document.getElementById("food-search").addEventListener("input", renderFoods);

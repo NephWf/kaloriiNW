@@ -46,6 +46,50 @@ button { cursor: pointer; }
   min-height: 100dvh;
   padding: max(16px, env(safe-area-inset-top)) 16px 118px;
 }
+.app.with-cheat {
+  padding-bottom: 196px;
+}
+
+.cheat-dock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 74px);
+  transform: translateX(-50%);
+  width: min(488px, calc(100% - 24px));
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  background: #0c1411;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 14px;
+}
+.cheat-dock b { display: block; font-size: 15px; }
+.cheat-dock small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.cheat-dock .switch {
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: #24302a;
+  position: relative;
+  flex: 0 0 auto;
+}
+.cheat-dock .switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #d7e4da;
+}
+.cheat-dock.on .switch { background: var(--gold); }
+.cheat-dock.on .switch::after { transform: translateX(20px); background: #1a1408; }
+.cheat-dock:disabled { opacity: 0.6; }
 
 .topbar, .date-row, .hero-meta, .macro-head, .water-head {
   display: flex;
