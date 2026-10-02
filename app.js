@@ -65,23 +65,23 @@ function dayDistance(a, b) {
   return Math.round(Math.abs(start - end) / 86400000);
 }
 
-function daysWord(count) {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return "день";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "дня";
-  return "дней";
-}
-
 function cheatStatus(date = state.date) {
   const on = Boolean(state.days[date]?.cheat);
-  let daysLeft = 0;
+  let next = "";
+  let later = false;
   for (const [key, log] of Object.entries(state.days)) {
-    if (!log?.cheat || key === date) continue;
-    const wait = 7 - dayDistance(key, date);
-    if (wait > daysLeft) daysLeft = wait;
+    if (!log?.cheat || key === date || dayDistance(key, date) >= 7) continue;
+    if (key > date) later = true;
+    const candidate = shiftDateKey(key, 7);
+    if (!next || candidate > next) next = candidate;
   }
-  return { on, locked: !on && daysLeft > 0, daysLeft };
+  return { on, locked: !on && Boolean(next), next, later };
+}
+
+function shiftDateKey(key, delta) {
+  const d = new Date(key + "T12:00:00");
+  d.setDate(d.getDate() + delta);
+  return todayKey(d);
 }
 
 function day(date = state.date) {
@@ -231,7 +231,9 @@ function renderToday() {
   document.getElementById("cheat-hint").textContent = cheat.on
     ? "Калории этого дня не учитываются"
     : cheat.locked
-      ? `Следующий через ${cheat.daysLeft} ${daysWord(cheat.daysLeft)}`
+      ? cheat.later
+        ? "В соседние дни чит-мил уже включён"
+        : "Следующий чит-мил — " + new Date(cheat.next + "T12:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
       : "Калории за этот день не пойдут в норму";
   renderWater();
   renderMeals();
