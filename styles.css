@@ -46,23 +46,16 @@ button { cursor: pointer; }
   min-height: 100dvh;
   padding: max(16px, env(safe-area-inset-top)) 16px 118px;
 }
-.app.with-cheat {
-  padding-bottom: 196px;
-}
 
 .cheat-dock {
-  position: fixed;
-  left: 50%;
-  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 74px);
-  transform: translateX(-50%);
-  width: min(488px, calc(100% - 24px));
-  z-index: 19;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
+  margin-top: 12px;
   text-align: left;
-  background: #0c1411;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 12px 14px;

@@ -468,8 +468,6 @@ function showView(view) {
   });
   const titles = { today: "Калории", foods: "Продукты", stats: "Статистика", profile: "Профиль" };
   document.getElementById("page-title").textContent = titles[view];
-  document.querySelector(".app").classList.toggle("with-cheat", view === "today");
-  document.getElementById("cheat-dock").classList.toggle("hidden", view !== "today");
   if (view === "foods") renderFoods();
   if (view === "stats") renderStats();
   if (view === "profile") renderProfile();
