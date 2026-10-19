@@ -14,8 +14,7 @@ const defaultProfile = {
   weight: 62,
   activity: "low",
   aim: "keep",
-  goals: { kcal: 2243, p: 99, f: 75, c: 293, water: 8 },
-  apiKey: ""
+  goals: { kcal: 2243, p: 99, f: 75, c: 293, water: 8 }
 };
 
 const state = {
@@ -39,7 +38,7 @@ function load() {
     const raw = JSON.parse(localStorage.getItem(KEY));
     if (raw?.profile && raw?.days) {
       raw.profile.activity = activityLevel(raw.profile.activity);
-      raw.profile.apiKey = raw.profile.apiKey || "";
+      delete raw.profile.apiKey;
       raw.customFoods = raw.customFoods || [];
       raw.hiddenFoods = raw.hiddenFoods || [];
       raw.foodEdits = raw.foodEdits || {};
@@ -361,8 +360,6 @@ function renderProfile() {
   document.getElementById("g-f").value = p.goals.f;
   document.getElementById("g-c").value = p.goals.c;
   document.getElementById("g-water").value = p.goals.water;
-  document.getElementById("p-api").value = p.apiKey || "";
-  document.getElementById("api-hint").textContent = p.apiKey ? "Ключ сохранён в браузере" : "Без ключа оценка блюда недоступна";
   document.getElementById("tdee-hint").textContent = `Текущая цель: ${fmt(p.goals.kcal)} ккал`;
 }
 
@@ -374,7 +371,6 @@ function readProfileForm() {
   state.profile.weight = Number(document.getElementById("p-weight").value);
   state.profile.activity = activityLevel(document.getElementById("p-activity").value);
   state.profile.aim = document.getElementById("p-aim").value;
-  state.profile.apiKey = document.getElementById("p-api").value.trim();
 }
 
 function activityLevel(value) {
@@ -623,131 +619,11 @@ function parseOnceClipboard(text) {
 }
 
 
-function fillOnce(parsed) {
-  if (!parsed) return false;
-  if (parsed.name != null) document.getElementById("once-name").value = parsed.name;
-  if (parsed.kcal != null) document.getElementById("once-kcal").value = parsed.kcal;
-  if (parsed.p != null) document.getElementById("once-p").value = parsed.p;
-  if (parsed.f != null) document.getElementById("once-f").value = parsed.f;
-  if (parsed.c != null) document.getElementById("once-c").value = parsed.c;
-  return true;
-}
-
-function parseLooseDish(text) {
-  const name = text.match(/н\s*:\s*([^/\n]+)/i)?.[1]?.trim();
-  const num = (mark) => {
-    const found = text.match(new RegExp(mark + "\\s*:\\s*(\\d+(?:[.,]\\d+)?)", "i"));
-    return found ? Number(found[1].replace(",", ".")) : undefined;
-  };
-  const kcal = num("к");
-  if (!name && kcal == null) return null;
-  return { name, kcal, p: num("б"), f: num("ж"), c: num("у") };
-}
-
-async function shrinkImage(file) {
-  const max = 480;
-  if (typeof createImageBitmap !== "function") {
-    if (file.size > 1500000) throw new Error("Фото слишком большое. Выберите снимок поменьше");
-    return shrinkWithImage(file, max);
-  }
-  let bitmap;
-  try {
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image", resizeWidth: max, resizeQuality: "low" });
-  } catch {
-    throw new Error("Не удалось прочитать фото");
-  }
-  try {
-    return bitmapToJpeg(bitmap, max);
-  } finally {
-    bitmap.close();
-  }
-}
-
-function bitmapToJpeg(bitmap, max) {
-  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const ctx = canvas.getContext("2d", { alpha: false });
-  if (!ctx) throw new Error("Не удалось прочитать фото");
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const url = canvas.toDataURL("image/jpeg", 0.6);
-  canvas.width = 0;
-  canvas.height = 0;
-  return url;
-}
-
-function shrinkWithImage(file, max) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    const url = URL.createObjectURL(file);
-    image.onload = () => {
-      const data = bitmapToJpeg(image, max);
-      URL.revokeObjectURL(url);
-      image.src = "";
-      resolve(data);
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Не удалось прочитать фото"));
-    };
-    image.src = url;
-  });
-}
-
-async function estimateDish(text, imageDataUrl) {
-  const key = (state.profile.apiKey || "").trim();
-  if (!key) throw new Error("Сначала вставьте ключ во вкладке Профиль");
-  if (!imageDataUrl && !String(text || "").trim()) throw new Error("Напишите или скажите, что вы съели");
-  const content = imageDataUrl
-    ? [
-        { type: "text", text: String(text || "").trim() || "Оцени еду на фото как одну порцию" },
-        { type: "image_url", image_url: { url: imageDataUrl, detail: "low" } }
-      ]
-    : String(text).trim();
-  const response = await fetch("https://api.relaymodels.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "grok-4.6",
-      temperature: 0,
-      messages: [
-        { role: "system", content: "Оцени съеденное как одну порцию. Верни только одну строку без пояснений: н:[название]/к:[калории]/б:[белки]/ж:[жиры]/у:[углеводы]. Числа за всю порцию, не на 100 г. Калории целым числом." },
-        { role: "user", content }
-      ]
-    })
-  });
-  if (!response.ok) {
-    let message = "";
-    try {
-      const body = await response.json();
-      message = typeof body.error === "string" ? body.error : body.error?.message || "";
-    } catch {}
-    if (response.status === 401 || /api key|unauthorized/i.test(message)) throw new Error("Ключ не подошёл");
-    if (response.status === 402 || /credit|billing|quota|balance|token/i.test(message)) throw new Error("На ключе закончились токены");
-    throw new Error("Не удалось посчитать. Попробуйте ещё раз");
-  }
-  const data = await response.json();
-  const raw = data?.choices?.[0]?.message?.content || "";
-  const parsed = parseOnceClipboard(raw) || parseLooseDish(String(raw));
-  if (!parsed || parsed.kcal == null) throw new Error("Не получилось разобрать ответ. Введите КБЖУ вручную");
-  return parsed;
-}
-
 function openOnceForm() {
   const meal = state.pendingMeal;
   openSheet(`
     <h2>Единоразовое блюдо</h2>
     <p class="muted">КБЖУ добавятся в выбранный приём. Название не сохранится в списке продуктов.</p>
-    <label class="muted" style="display:block;margin:8px 0">Что съели
-      <input id="once-said" type="text" placeholder="Борщ и два куска хлеба" />
-    </label>
-    <div class="two">
-      <button class="btn" id="once-say" type="button">Сказать</button>
-      <button class="btn" id="once-photo" type="button">Сфоткать</button>
-    </div>
-    <input id="once-file" type="file" accept="image/jpeg,image/png,image/*" capture="environment" hidden />
-    <button class="btn" id="once-ask" type="button" style="margin-bottom:12px">Посчитать</button>
     <button class="btn" id="paste-once" type="button" style="margin-bottom:12px;background:#123024;color:#8fde7a">Вставить из буфера</button>
     <p class="muted" id="paste-once-error"></p>
     <label class="muted" style="display:block;margin:8px 0">Название
@@ -785,49 +661,6 @@ function openOnceForm() {
       if (parsed.c != null) document.getElementById("once-c").value = parsed.c;
     } catch {
       error.textContent = "Нет доступа к буферу. Введите данные вручную.";
-    }
-  };
-  const status = document.getElementById("paste-once-error");
-  const askButton = document.getElementById("once-ask");
-  async function runAsk(text, image) {
-    status.textContent = "";
-    askButton.disabled = true;
-    askButton.textContent = "Считаю…";
-    try {
-      if (!fillOnce(await estimateDish(text, image))) status.textContent = "Не получилось разобрать ответ";
-    } catch (error) {
-      status.textContent = error.message || "Не удалось посчитать";
-    } finally {
-      askButton.disabled = false;
-      askButton.textContent = "Посчитать";
-    }
-  }
-  askButton.onclick = () => runAsk(document.getElementById("once-said").value);
-  document.getElementById("once-say").onclick = () => {
-    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Ctor) {
-      status.textContent = "Этот браузер не умеет диктовать. Напишите текстом.";
-      return;
-    }
-    const rec = new Ctor();
-    rec.lang = "ru-RU";
-    rec.onerror = () => { status.textContent = "Не расслышал. Напишите текстом."; };
-    rec.onresult = (event) => {
-      const text = event.results[0][0].transcript.trim();
-      document.getElementById("once-said").value = text;
-      if (text) runAsk(text);
-    };
-    rec.start();
-  };
-  document.getElementById("once-photo").onclick = () => document.getElementById("once-file").click();
-  document.getElementById("once-file").onchange = async (event) => {
-    const file = event.target.files && event.target.files[0];
-    event.target.value = "";
-    if (!file) return;
-    try {
-      await runAsk(document.getElementById("once-said").value || "Оцени еду на фото как одну порцию", await shrinkImage(file));
-    } catch (error) {
-      status.textContent = error.message || "Не удалось прочитать фото";
     }
   };
   document.getElementById("save-once").onclick = () => {
@@ -956,13 +789,6 @@ document.getElementById("cheat-dock").addEventListener("click", () => {
 });
 
 document.getElementById("food-search").addEventListener("input", renderFoods);
-document.getElementById("p-api").addEventListener("change", () => {
-  state.profile.apiKey = document.getElementById("p-api").value.trim();
-  save();
-  document.getElementById("api-hint").textContent = state.profile.apiKey
-    ? "Ключ сохранён в браузере"
-    : "Без ключа оценка блюда недоступна";
-});
 document.getElementById("cal-burned").parentElement.addEventListener("click", openBurned);
 
 save();
