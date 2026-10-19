@@ -594,17 +594,38 @@ function openFoodForm(food) {
   }
 }
 
+function parseOnceClipboard(text) {
+  const parsed = {};
+  let found = false;
+  for (const part of String(text).split("/")) {
+    const match = part.trim().match(/^([нкбжу])\s*:\s*(.*)$/i);
+    if (!match) continue;
+    found = true;
+    const key = match[1].toLowerCase();
+    const value = match[2].trim();
+    if (key === "н") {
+      parsed.name = value;
+      continue;
+    }
+    const number = Number(value.replace(",", "."));
+    if (!Number.isFinite(number)) continue;
+    if (key === "к") parsed.kcal = number;
+    if (key === "б") parsed.p = number;
+    if (key === "ж") parsed.f = number;
+    if (key === "у") parsed.c = number;
+  }
+  return found ? parsed : null;
+}
+
 function openOnceForm() {
+  const meal = state.pendingMeal;
   openSheet(`
     <h2>Единоразовое блюдо</h2>
-    <p class="muted">КБЖУ добавятся в день. Название не сохранится в списке продуктов.</p>
+    <p class="muted">КБЖУ добавятся в выбранный приём. Название не сохранится в списке продуктов.</p>
+    <button class="btn" id="paste-once" type="button" style="margin-bottom:12px;background:#123024;color:#8fde7a">Вставить из буфера</button>
+    <p class="muted" id="paste-once-error"></p>
     <label class="muted" style="display:block;margin:8px 0">Название
       <input id="once-name" type="text" placeholder="Обед в гостях" />
-    </label>
-    <label class="muted" style="display:block;margin:8px 0">Приём пищи
-      <select id="once-meal">
-        ${MEALS.map((meal) => `<option value="${meal.id}" ${state.pendingMeal === meal.id ? "selected" : ""}>${meal.title}</option>`).join("")}
-      </select>
     </label>
     <label class="muted" style="display:block;margin:8px 0">Калории за порцию
       <input id="once-kcal" type="number" min="0" step="1" />
@@ -622,8 +643,25 @@ function openOnceForm() {
     </label>
     <button class="btn primary" id="save-once" type="button">Добавить в день</button>
   `);
+  document.getElementById("paste-once").onclick = async () => {
+    const error = document.getElementById("paste-once-error");
+    error.textContent = "";
+    try {
+      const parsed = parseOnceClipboard(await navigator.clipboard.readText());
+      if (!parsed) {
+        error.textContent = "Формат: н:название/к:калории/б:белки/ж:жиры/у:углеводы";
+        return;
+      }
+      if (parsed.name != null) document.getElementById("once-name").value = parsed.name;
+      if (parsed.kcal != null) document.getElementById("once-kcal").value = parsed.kcal;
+      if (parsed.p != null) document.getElementById("once-p").value = parsed.p;
+      if (parsed.f != null) document.getElementById("once-f").value = parsed.f;
+      if (parsed.c != null) document.getElementById("once-c").value = parsed.c;
+    } catch {
+      error.textContent = "Нет доступа к буферу. Введите данные вручную.";
+    }
+  };
   document.getElementById("save-once").onclick = () => {
-    const meal = document.getElementById("once-meal").value;
     day().meals[meal].push({
       foodId: "once-" + Date.now(),
       grams: 100,
