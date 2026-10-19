@@ -644,19 +644,48 @@ function parseLooseDish(text) {
   return { name, kcal, p: num("б"), f: num("ж"), c: num("у") };
 }
 
-function shrinkImage(file) {
+async function shrinkImage(file) {
+  const max = 480;
+  if (typeof createImageBitmap !== "function") {
+    if (file.size > 1500000) throw new Error("Фото слишком большое. Выберите снимок поменьше");
+    return shrinkWithImage(file, max);
+  }
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image", resizeWidth: max, resizeQuality: "low" });
+  } catch {
+    throw new Error("Не удалось прочитать фото");
+  }
+  try {
+    return bitmapToJpeg(bitmap, max);
+  } finally {
+    bitmap.close();
+  }
+}
+
+function bitmapToJpeg(bitmap, max) {
+  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext("2d", { alpha: false });
+  if (!ctx) throw new Error("Не удалось прочитать фото");
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const url = canvas.toDataURL("image/jpeg", 0.6);
+  canvas.width = 0;
+  canvas.height = 0;
+  return url;
+}
+
+function shrinkWithImage(file, max) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     const url = URL.createObjectURL(file);
     image.onload = () => {
-      const max = 512;
-      const scale = Math.min(1, max / Math.max(image.width, image.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(image.width * scale));
-      canvas.height = Math.max(1, Math.round(image.height * scale));
-      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      const data = bitmapToJpeg(image, max);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.7));
+      image.src = "";
+      resolve(data);
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
