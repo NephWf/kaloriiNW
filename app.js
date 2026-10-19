@@ -256,8 +256,10 @@ function renderMeals() {
     const list = items.map((entry, idx) => {
       const food = findFood(entry.foodId) || entry.snapshot || { name: "Продукт" };
       const m = macrosOf(entry);
+      const once = String(entry.foodId || "").startsWith("once-");
+      const amount = once ? "порция" : `${fmt(entry.grams)} г`;
       return `<div class="entry">
-        <div><b>${food.name}</b><small>${fmt(entry.grams)} г · Б ${fmt(m.p, 1)} Ж ${fmt(m.f, 1)} У ${fmt(m.c, 1)}</small></div>
+        <div><b>${esc(food.name)}</b><small>${amount} · Б ${fmt(m.p, 1)} Ж ${fmt(m.f, 1)} У ${fmt(m.c, 1)}</small></div>
         <div>${fmt(m.kcal)} ккал</div>
         <button class="x" data-remove="${meal.id}:${idx}" type="button">×</button>
       </div>`;
@@ -286,6 +288,7 @@ function renderFoods() {
   });
   document.getElementById("food-list").innerHTML = `
     <button class="meal-add custom-add" id="add-custom" type="button">+ Свой продукт</button>
+    <button class="meal-add custom-add" id="add-once" type="button">+ Единоразовое блюдо</button>
     <div class="food-list">
       ${list.map((f) => `<div class="food-item">
         <button class="food-main" data-food="${esc(f.id)}" type="button">
@@ -591,6 +594,54 @@ function openFoodForm(food) {
   }
 }
 
+function openOnceForm() {
+  openSheet(`
+    <h2>Единоразовое блюдо</h2>
+    <p class="muted">КБЖУ добавятся в день. Название не сохранится в списке продуктов.</p>
+    <label class="muted" style="display:block;margin:8px 0">Название
+      <input id="once-name" type="text" placeholder="Обед в гостях" />
+    </label>
+    <label class="muted" style="display:block;margin:8px 0">Приём пищи
+      <select id="once-meal">
+        ${MEALS.map((meal) => `<option value="${meal.id}" ${state.pendingMeal === meal.id ? "selected" : ""}>${meal.title}</option>`).join("")}
+      </select>
+    </label>
+    <label class="muted" style="display:block;margin:8px 0">Калории за порцию
+      <input id="once-kcal" type="number" min="0" step="1" />
+    </label>
+    <div class="two">
+      <label class="muted">Белки, г
+        <input id="once-p" type="number" min="0" step="0.1" />
+      </label>
+      <label class="muted">Жиры, г
+        <input id="once-f" type="number" min="0" step="0.1" />
+      </label>
+    </div>
+    <label class="muted" style="display:block;margin:8px 0">Углеводы, г
+      <input id="once-c" type="number" min="0" step="0.1" />
+    </label>
+    <button class="btn primary" id="save-once" type="button">Добавить в день</button>
+  `);
+  document.getElementById("save-once").onclick = () => {
+    const meal = document.getElementById("once-meal").value;
+    day().meals[meal].push({
+      foodId: "once-" + Date.now(),
+      grams: 100,
+      snapshot: {
+        name: document.getElementById("once-name").value.trim() || "Блюдо",
+        kcal: Number(document.getElementById("once-kcal").value) || 0,
+        p: Number(document.getElementById("once-p").value) || 0,
+        f: Number(document.getElementById("once-f").value) || 0,
+        c: Number(document.getElementById("once-c").value) || 0
+      }
+    });
+    save();
+    closeSheet();
+    showView("today");
+    renderToday();
+  };
+}
+
 function openBurned() {
   openSheet(`
     <h2>Сожжённые калории</h2>
@@ -654,6 +705,7 @@ document.body.addEventListener("click", (e) => {
   const foodBtn = e.target.closest("[data-food]");
   if (foodBtn) openAddFood(findFood(foodBtn.dataset.food), state.pendingMeal);
   if (e.target.id === "add-custom") openFoodForm(null);
+  if (e.target.id === "add-once") openOnceForm();
   if (e.target.id === "sheet-close") closeSheet();
   if (e.target.id === "calc-goal") calcTdee();
   if (e.target.id === "save-goals") {
